@@ -11,6 +11,8 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
+    "os"
+    "bufio"
 	"log"
 	"sort"
 	"strconv"
@@ -32,6 +34,7 @@ import (
 
 var (
 	nodesrv         = flag.String("nodesrv", "127.0.0.1:9990", "Node ID Server")
+	logfile         = flag.String("logfile", "", "LogFile name (default stdout)")    
 	idlist          []uint64
 	spMap           map[uint64]*sxutil.SupplyOpts
 	mu              sync.Mutex
@@ -39,6 +42,7 @@ var (
 	svc				*kinesis.Kinesis
 	lastLogTime	time.Time
 	lastLogCount    = 0
+    totalErrorCount = 0
 )
 
 type Channel struct {
@@ -129,7 +133,8 @@ func sendDataToKinesis(data []byte){
             }else {lastLogCount++}
             break
         }
-        log.Printf("Error on putRecord to Kinesis: %v",err)
+        totalErrorCount++
+        log.Printf("Error on putRecord to Kinesis:%d: %v ", totalErrorCount,err)
         // we need to retry
         
         count *=2
@@ -269,8 +274,19 @@ func main() {
 	terminals = make(map[string]*Terminal)
 	amps = make(map[string]*AMPM)
 	totalTerminals = 0
-
 	flag.Parse()
+
+    if *logfile != "" {// log
+        file, ferr := os.Create(*logfile)
+        if ferr != nil {
+            logWriter := bufio.NewWriter(file)
+            log.SetOutput(logWriter)
+        }else{
+            fmt.Printf("Can't create file [%s], %v\n",*logfile, ferr)
+            log.Fatalf("Can't create file [%s], %v",*logfile, ferr)
+        }
+    }
+    
 	go sxutil.HandleSigInt()
 	sxutil.RegisterDeferFunction(sxutil.UnRegisterNode)
 
